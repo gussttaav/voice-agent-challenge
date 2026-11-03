@@ -25,6 +25,7 @@ function App() {
   const [config, setConfig] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [failed, setFailed] = useState(null);
   const [input, setInput] = useState('');
   const [voiceOn, setVoiceOn] = useState(true);
   const [fault, setFault] = useState('none');
@@ -34,6 +35,9 @@ function App() {
   const end = useRef(null);
   const speech = useSpeech((text, confidence) => send(text, 'voice', confidence), setError);
   const completed = session?.status === 'completed';
+  const confirming = !completed && session?.step === 'confirmation';
+  // Fallos de conexión, timeout, límite de peticiones o servicio caído: el mismo turno se puede reenviar.
+  const retryable = failed && (failed.status === 0 || failed.status === 429 || failed.status >= 500);
   useEffect(() => { bootstrap(); }, []);
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [session?.messages.length]);
   useEffect(() => {
@@ -66,7 +70,7 @@ function App() {
   async function newConversation() {
     if (busy) return;
     speech.stop(); window.speechSynthesis?.cancel();
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setFailed(null);
     try {
       const current = await post('/sessions');
       setSession(current); localStorage.setItem('vera-session', current.id);
@@ -76,13 +80,13 @@ function App() {
   }
   async function send(text, source = 'text', confidence = null) {
     if (busy || !session || completed || !text.trim()) return;
-    setBusy(true); setError(''); speech.stop();
+    setBusy(true); setError(''); setFailed(null); speech.stop();
     try {
       const updated = await post(`/sessions/${session.id}/turns`, { text, source, confidence, fault });
       setSession(updated); setInput('');
       if (voiceOn) speech.speak(updated.messages.at(-1).content);
     } catch (err) {
-      setInput(text); setError(err.message);
+      setInput(text); setError(err.message); setFailed({ text, source, confidence, status: err.status });
       try { setSession(await request(`/sessions/${session.id}`)); } catch { /* El error original permanece visible. */ }
     } finally { setBusy(false); }
   }
@@ -91,6 +95,9 @@ function App() {
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `vera-${session.id}.json`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  // Durante la conversación el aviso se muestra junto al cuadro de respuesta para que siempre sea visible.
+  const inComposer = tab === 'conversation' && session && !completed;
+  const banner = error && <div className="error-banner" role="alert"><span>{error}</span>{!session && <button onClick={bootstrap} disabled={busy}>Reconectar</button>}{retryable && inComposer && <button className="retry-button" onClick={() => send(failed.text, failed.source, failed.confidence)} disabled={busy}>{failed.status === 503 && confirming ? 'Reintentar guardado' : 'Reintentar'}</button>}<button onClick={() => { setError(''); setFailed(null); }} aria-label="Cerrar aviso">×</button></div>;
   return <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('conversation'); }}><span className="brand-symbol">v</span>vera<span className="brand-dot">.</span></a>
@@ -105,7 +112,7 @@ function App() {
     <main>
       <header className="topbar"><span>Laboratorio de atención al cliente</span><span className="prototype">Prototipo</span></header>
       <div className="page-heading"><div><h1>{tab === 'conversation' ? 'Cada conversación cuenta.' : 'Clientes del CRM'}</h1><p>{tab === 'conversation' ? 'Escucha, recoge los datos y acompaña al cliente hasta la confirmación.' : 'Consulta los contactos guardados y contrasta la información recogida.'}</p></div><button className="button secondary" onClick={newConversation} disabled={busy || speech.listening}><Icon name="plus"/>Nueva conversación</button></div>
-      {error && <div className="error-banner" role="alert"><span>{error}</span>{!session && <button onClick={bootstrap} disabled={busy}>Reconectar</button>}<button onClick={() => setError('')} aria-label="Cerrar aviso">×</button></div>}
+      {!inComposer && banner}
       {tab === 'conversation' ? <div className="workspace">
         <section className="conversation-panel" aria-label="Conversación con Vera">
           <div className="panel-heading"><div className="agent-avatar">v</div><div><h2>Vera</h2><span>{completed ? 'Conversación finalizada' : 'Asistente de recogida de datos'}</span></div><button className={`icon-button ${voiceOn ? 'selected' : ''}`} onClick={() => { setVoiceOn(!voiceOn); window.speechSynthesis?.cancel(); }} aria-label={voiceOn ? 'Desactivar respuestas de voz' : 'Activar respuestas de voz'} aria-pressed={voiceOn}><Icon name="audio"/></button></div>
@@ -117,6 +124,8 @@ function App() {
           </div>
           {completed ? <div className="completion"><span className="check-circle"><Icon name="check"/></span><div><strong>Contacto guardado</strong><p>Puedes consultarlo en el CRM o empezar otra conversación.</p></div><button className="button secondary" onClick={() => setTab('crm')}>Ver CRM</button></div> : <div className="composer">
             <div className={`voice-area ${speech.listening ? 'listening' : ''}`}><div className="waveform" aria-hidden="true">{[9,16,25,14,33,43,24,36,51,30,19,39,26,14,23,10,18].map((height, i) => <span key={i} style={{ height, animationDelay: `${i * .07}s` }}/>)}</div><button className="mic-button" onClick={speech.listening ? speech.stop : speech.start} disabled={!speech.supported || busy || !session} aria-label={speech.listening ? 'Terminar grabación' : 'Empezar a hablar'} aria-pressed={speech.listening}><Icon name="mic" size={25}/></button><div><strong>{speech.listening ? 'Te escucho…' : 'Tu voz, el punto de partida'}</strong><p>{speech.supported ? 'Pulsa el micrófono para hablar por turnos.' : 'Este navegador no admite voz. Utiliza el texto.'}</p></div></div>
+            {inComposer && banner}
+            {confirming && <div className="confirm-actions" role="group" aria-label="Confirmar los datos"><button className="button primary" onClick={() => send('Sí')} disabled={busy || speech.listening}><Icon name="check" size={16}/>Sí, guardar</button><button className="button secondary" onClick={() => send('No')} disabled={busy || speech.listening}>Corregir</button></div>}
             <form onSubmit={event => { event.preventDefault(); send(input); }}><label className="sr-only" htmlFor="reply">Tu respuesta por texto</label><input id="reply" value={input} onChange={e => setInput(e.target.value)} placeholder="También puedes escribir tu respuesta…" disabled={busy || speech.listening || !session} maxLength={4000}/><button className="send-button" type="submit" aria-label="Enviar respuesta" disabled={!input.trim() || busy || speech.listening || !session}><Icon name="send"/></button></form>
             <p className="privacy-note">Utiliza datos ficticios. El servicio de voz del navegador puede procesar audio en servidores externos.</p>
           </div>}

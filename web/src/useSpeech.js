@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+// Al leer un correo en voz alta se pronuncian sus símbolos para que la persona pueda comprobarlo.
+const symbols = { '.': ' punto ', '@': ' arroba ', '_': ' guion bajo ', '-': ' guion ' };
+const spellEmails = text => text.replace(/[\w.+%-]+@[\w-]+(?:\.[\w-]+)+/g,
+  email => email.replace(/[.@_-]/g, symbol => symbols[symbol]).replace(/\s+/g, ' ').trim());
 export function useSpeech(onTranscript, onError) {
   const [listening, setListening] = useState(false);
   const recognition = useRef(null);
@@ -39,7 +43,7 @@ export function useSpeech(onTranscript, onError) {
   function speak(text) {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(spellEmails(text));
     utterance.lang = 'es-ES';
     window.speechSynthesis.speak(utterance);
   }
