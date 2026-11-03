@@ -24,7 +24,7 @@ services:
       PGPASSWORD: ${DB_PASSWORD:-local-demo-password}
       AI_PROVIDER: ${AI_PROVIDER:-demo}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5-5}
       ENABLE_FAULTS: ${ENABLE_FAULTS:-true}
     depends_on:
       db:

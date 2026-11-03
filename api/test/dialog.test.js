@@ -65,6 +65,12 @@ test('tras preguntar qué corregir, basta con nombrar el dato', async () => {
   assert.equal(result.draft.lastName, 'Pérez Gil');
 });
 
+test('si una corrección no cambia el dato, se dice y se ofrece escribirlo', async () => {
+  const result = await talk(...filled, 'No, el apellido', 'Pérez');
+  assert.equal(result.step, 'confirmation');
+  assert.match(result.reply, /sigo teniendo «Pérez»/);
+});
+
 test('se puede corregir un dato anterior mientras se pide otro', async () => {
   const result = await talk('José', 'De la Torre', 'Perdona, mi nombre es José María');
   assert.equal(result.step, 'email');
@@ -101,7 +107,10 @@ test('validación de correo y nombre', () => {
   for (const value of ['hola', 'ana@', '@example.com', 'ana..perez@example.com', 'ana perez@example.com', 'ana@example']) {
     assert.equal(cleanEmail(value), null, value);
   }
-  assert.equal(cleanName('  josé   maría. '), 'josé maría');
+  assert.equal(cleanName('  josé   maría. '), 'José María');
+  assert.equal(cleanName('ortega bueno'), 'Ortega Bueno');
+  assert.equal(cleanName('de la torre'), 'De la Torre');
+  assert.equal(cleanName("O'Connor de la Fuente"), "O'Connor de la Fuente");
   assert.equal(cleanName('Ana2'), null);
   assert.equal(cleanName('ana@example.com'), null);
 });

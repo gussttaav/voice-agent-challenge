@@ -38,7 +38,14 @@ export function applyTurn({ draft: current, step }, { updates = {}, intent = 'un
   if (rejected.length) return turn(rejected[0], invalid[rejected[0]]);
   const missing = fields.find(name => !draft[name]);
   if (missing) return turn(missing, (changed.some(name => name !== step) ? 'Anotado. ' : '') + questions[missing]);
-  if (step !== 'confirmation') return turn('confirmation', summary(draft));
+  if (step !== 'confirmation') {
+    // Se pidió corregir un dato y la respuesta no lo ha cambiado: se dice para no dar la impresión de ignorar
+    // a la persona, y se ofrece el texto como alternativa a la voz.
+    const unchanged = current[step] && !changed.includes(step);
+    return turn('confirmation', unchanged
+      ? `No he entendido ningún cambio: sigo teniendo «${draft[step]}». Si no es correcto, escríbelo en el cuadro de texto. ${summary(draft)}`
+      : summary(draft));
+  }
   // Solo se guarda tras un sí explícito sobre datos que no han cambiado en este turno.
   if (changed.length) return turn('confirmation', `Corregido. ${summary(draft)}`);
   if (intent === 'confirm') return turn('confirmation', '', true);
