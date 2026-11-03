@@ -5,6 +5,7 @@ import { greeting } from './services/dialog.js';
 import { providerName } from './providers/index.js';
 import { advance } from './services/conversation.js';
 import { searchCustomers, saveCustomer } from './services/crm.js';
+import { sttEnabled, transcribe } from './services/transcription.js';
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '32kb' }));
@@ -12,7 +13,16 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 app.param('id', (req, res, next, id) => uuid.test(id) ? next() : res.status(400).json({ error: 'Identificador inválido.' }));
 app.get('/api/health', async (req, res) => {
   await db.query('SELECT 1');
-  res.json({ status: 'ok', provider: providerName, faultsEnabled: process.env.ENABLE_FAULTS === 'true' });
+  res.json({ status: 'ok', provider: providerName, faultsEnabled: process.env.ENABLE_FAULTS === 'true',
+    transcription: sttEnabled ? 'server' : 'browser' });
+});
+// El audio llega en bruto (pulsar para hablar, unos segundos) y no se guarda: solo se reenvía al servicio de transcripción.
+app.post('/api/transcriptions', express.raw({ type: 'audio/*', limit: '2mb' }), async (req, res) => {
+  if (!sttEnabled) return res.status(404).json({ error: 'La transcripción en el servidor no está configurada.' });
+  if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
+    return res.status(422).json({ error: 'La grabación es demasiado corta. Pulsa el micrófono, habla y vuelve a pulsarlo.' });
+  }
+  res.json(await transcribe(req.body, req.get('content-type')));
 });
 app.post('/api/sessions', async (req, res) => {
   const id = randomUUID();

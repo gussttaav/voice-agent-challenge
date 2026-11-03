@@ -26,6 +26,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5-5}
       ENABLE_FAULTS: ${ENABLE_FAULTS:-true}
+      STT_PROVIDER: ${STT_PROVIDER:-browser}
+      STT_BASE_URL: ${STT_BASE_URL:-https://api.groq.com/openai/v1}
+      STT_API_KEY: ${STT_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-whisper-large-v3-turbo}
     depends_on:
       db:
         condition: service_healthy
