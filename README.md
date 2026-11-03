@@ -55,14 +55,14 @@ Edita `.env`:
 ```dotenv
 AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=tu-clave
-ANTHROPIC_MODEL=claude-sonnet-4-6
+ANTHROPIC_MODEL=claude-sonnet-5-5
 ```
 
 ```sh
 docker compose up -d --force-recreate api
 ```
 
-La clave solo llega al contenedor del backend. El adaptador usa `POST /v1/messages` y un timeout de 15 segundos. Comprueba el acceso al modelo en tu cuenta y configura el que prefieras. Las llamadas reales generan consumo; no se calculan precios ni costes ficticios. La integración es deliberadamente básica y está abierta a mejoras o sustitución por otro proveedor.
+La clave solo llega al contenedor del backend. El adaptador usa el SDK oficial (`@anthropic-ai/sdk`) con salida estructurada, esfuerzo `low`, caché del prompt de sistema y un timeout de 8 segundos con un reintento automático. El modelo solo extrae lo que dice la persona; la validación, el flujo y la decisión de guardar se hacen en código (`api/src/services/dialog.js`). Las llamadas reales generan consumo; las métricas muestran los tokens reportados, incluidos los leídos de caché.
 
 Referencia del contrato: [Claude Messages API](https://platform.claude.com/docs/en/api/messages/create).
 
@@ -73,6 +73,21 @@ El reconocimiento utiliza `SpeechRecognition` / `webkitSpeechRecognition`, si es
 Algunos navegadores envían audio a sus propios servicios de reconocimiento. No es una solución completamente offline aunque el intérprete esté en modo demo. Usa exclusivamente datos ficticios. El texto del diálogo se guarda en la base de datos y se envía al proveedor si activas Claude. La exportación JSON contiene el historial y los datos recogidos.
 
 Referencias: [SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition), [SpeechSynthesis](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis).
+
+## Transcripción con Groq (opcional)
+
+Por defecto se usa el reconocimiento de voz del navegador. Para transcribir en el servidor con Whisper a través de Groq, crea una clave en [console.groq.com/keys](https://console.groq.com/keys) y edita `.env`:
+
+```dotenv
+STT_PROVIDER=openai-compatible
+STT_API_KEY=tu-clave
+```
+
+```sh
+docker compose up -d --force-recreate api
+```
+
+El micrófono pasa a funcionar como «pulsar para hablar»: pulsa, habla y vuelve a pulsar. El audio se envía al backend, se reenvía a Groq y no se guarda. Si falta la clave, se usa el navegador. `STT_BASE_URL` admite cualquier API compatible con OpenAI (por ejemplo Speaches/faster-whisper en local), aunque solo se ha verificado con Groq.
 
 ## Escenarios y observabilidad
 
@@ -96,6 +111,10 @@ docker compose up --build -d
 
 # Parar conservando los datos
 docker compose down
+
+# Ejecutar las comprobaciones automatizadas (usan PostgreSQL de Docker y el intérprete demo; no llaman a proveedores reales)
+docker compose build api
+docker compose run --rm -v "$PWD/api/test:/app/test:ro" api npm test
 
 # Abrir una consola SQL
 docker compose exec db psql -U voice_agent -d voice_agent

@@ -4,12 +4,13 @@ Todas las rutas pasan por `/api`. JSON de entrada y salida. No hay autenticació
 
 | Método | Ruta | Resultado |
 | --- | --- | --- |
-| GET | `/health` | Estado de BD, proveedor y simulaciones activas |
+| GET | `/health` | Estado de BD, proveedor, simulaciones activas y modo de transcripción (`browser` o `server`) |
 | POST | `/sessions` | Crea una conversación y devuelve su estado (201) |
 | GET | `/sessions/:id` | Estado, borrador, mensajes y métricas |
 | POST | `/sessions/:id/turns` | Procesa un turno y devuelve el estado |
 | GET | `/customers/search?q=texto` | `{ customers: [...] }`, máximo 50 |
-| POST | `/customers` | Registra un contacto y devuelve el registro (201) |
+| POST | `/customers` | Registra un contacto: 201 si lo crea, 200 si ya existe con el mismo nombre, 409 si el correo pertenece a otra persona |
+| POST | `/transcriptions` | Audio en bruto (`Content-Type: audio/*`, máx. 2 MB) → `{ text, confidence }`. Solo con `STT_PROVIDER=openai-compatible` y clave; 422 si no hay voz utilizable |
 
 ## Crear sesión y procesar un turno
 
@@ -38,6 +39,8 @@ El estado devuelto tiene esta forma:
 }
 ```
 
+Un turno se procesa en una transacción: si falla (IA, CRM o base de datos) no se guarda nada y se puede reenviar. Enviar un turno a una sesión `completed` devuelve su estado sin procesarlo.
+
 `status`: `collecting` o `completed`. `step`: `firstName`, `lastName`, `email` o `confirmation`. El borrador no incluye un estado de validación por campo. El último paso se mantiene como `confirmation` tras completar; el estado terminal lo indica `status`.
 
 ## CRM
@@ -49,19 +52,20 @@ curl -X POST http://localhost:8080/api/customers \
   -d '{"firstName":"Ana","lastName":"Pérez","email":"ana@example.com"}'
 ```
 
-Los contactos tienen `id`, `firstName`, `lastName`, `email`, `createdAt` y `updatedAt`. El contrato de registro actual reutiliza un contacto si el correo coincide. Revisa si ese comportamiento satisface las necesidades del producto.
+Los contactos tienen `id`, `firstName`, `lastName`, `email`, `createdAt` y `updatedAt`. El correo identifica al contacto y se guarda en minúsculas. Si ya existe con el mismo nombre (sin distinguir mayúsculas ni acentos) se reutiliza sin modificarlo; si existe con otro nombre es un conflicto de identidad: no se escribe nada ni se devuelven los datos del otro contacto.
 
 ## Adaptadores de extracción
 
-`interpret(session, text, fault)` recibe la sesión del servidor, el texto y el escenario. Devuelve:
+`interpret(session, text, fault)` recibe la sesión del servidor, el texto y el escenario. Devuelve solo lo que ha dicho la persona en ese turno:
 
 ```json
 {
-  "draft": { "firstName": "Ana", "lastName": "Pérez", "email": "ana@example.com" },
-  "step": "confirmation",
-  "confirmed": false,
-  "reply": "¿Son correctos estos datos?"
+  "updates": { "firstName": "", "lastName": "Pérez Gil", "email": "" },
+  "intent": "provide",
+  "field": null
 }
 ```
 
-Puede incluir `usage.input_tokens` y `usage.output_tokens`. La orquestación decide cómo persistir el resultado. Para añadir un proveedor, implementa un adaptador y selecciónalo en `providers/index.js`; actualiza la configuración y la documentación.
+`updates`: campos mencionados (los vacíos se ignoran). `intent`: `provide`, `confirm`, `reject` o `unclear`. `field`: dato que la persona dice que está mal sin dar el valor nuevo, o `null`. Puede incluir `usage.input_tokens` y `usage.output_tokens`.
+
+`services/dialog.js` valida y fusiona los campos, decide el siguiente paso y la respuesta, y solo marca la sesión para guardar tras un `confirm` sobre datos que no han cambiado en ese turno. Para añadir un proveedor, implementa un adaptador con este contrato y selecciónalo en `providers/index.js`.
