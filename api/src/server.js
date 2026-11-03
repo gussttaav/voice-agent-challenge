@@ -50,7 +50,9 @@ app.post('/api/customers', async (req, res) => {
   if (![firstName, lastName, email].every(value => typeof value === 'string' && value.trim() && value.length <= 200)) {
     return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios.' });
   }
-  res.status(201).json(await saveCustomer({ firstName, lastName, email }));
+  const saved = await saveCustomer({ firstName, lastName, email });
+  if (saved.outcome === 'conflict') return res.status(409).json({ error: 'El correo ya pertenece a otro contacto. No se ha modificado.' });
+  res.status(saved.outcome === 'created' ? 201 : 200).json(saved.customer);
 });
 app.use((error, req, res, next) => {
   const status = error.status >= 400 && error.status <= 599 ? error.status : 500;

@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
-  "scripts": { "start": "node src/server.js", "dev": "node --watch src/server.js" },
+  "scripts": { "start": "node src/server.js", "dev": "node --watch src/server.js", "test": "node --test --test-concurrency=1" },
   "dependencies": { "express": "5.1.0", "pg": "8.16.3" }
 }
