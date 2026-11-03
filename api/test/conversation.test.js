@@ -42,6 +42,14 @@ test('un conflicto de identidad no guarda, conserva nombre y apellidos y vuelve 
   assert.equal(row.first_name, 'Lucía');
 });
 
+test('«No, no es correcto» no guarda nada en el CRM', async () => {
+  const email = newEmail();
+  const id = await newSession();
+  const state = await say(id, 'Ana', 'Pérez', email, 'No, no es correcto');
+  assert.equal(state.status, 'collecting');
+  assert.equal((await customer(email)).length, 0);
+});
+
 test('si el CRM falla al confirmar no se pierde el borrador ni quedan mensajes a medias', async () => {
   const email = newEmail();
   const id = await newSession();

@@ -1,7 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { db, readSession } from './db.js';
-import { greeting } from './providers/demo.js';
+import { greeting } from './services/dialog.js';
 import { providerName } from './providers/index.js';
 import { advance } from './services/conversation.js';
 import { searchCustomers, saveCustomer } from './services/crm.js';

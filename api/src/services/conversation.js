@@ -1,6 +1,7 @@
 import { db, readSession } from '../db.js';
 import { interpret, providerName } from '../providers/index.js';
 import { saveCustomer } from './crm.js';
+import { applyTurn } from './dialog.js';
 const replies = {
   created: 'Listo. Tus datos se han guardado en el CRM. Gracias por tu tiempo.',
   matched: 'Ya tenías una ficha con estos mismos datos. La he vinculado sin modificarla. Gracias por tu tiempo.',
@@ -24,11 +25,11 @@ export async function advance(id, { text, source = 'text', confidence = null, fa
     const session = await readSession(id, client);
     await client.query('INSERT INTO messages(session_id,role,content,source,confidence) VALUES($1,$2,$3,$4,$5)',
       [id, 'user', text, source, confidence]);
-    const result = await interpret(session, text, fault);
-    usage = result.usage;
-    let { draft, step, reply } = result;
+    const extraction = await interpret(session, text, fault);
+    usage = extraction.usage;
+    let { draft, step, reply, confirmed } = applyTurn(session, extraction);
     let status = 'collecting', customerId = null;
-    if (result.confirmed) {
+    if (confirmed) {
       if (fault === 'crm-unavailable') throw Object.assign(new Error('El CRM no está disponible. Tus datos se conservan: reintenta la confirmación.'), { status: 503 });
       const saved = await saveCustomer(draft, client);
       reply = replies[saved.outcome];
